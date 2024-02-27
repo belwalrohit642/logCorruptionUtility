@@ -1,0 +1,74 @@
+processed_file_path="/home/rohit/Documents/task2/revision2/proc/processQueue.txt"
+memory_status_path="/home/rohit/Documents/task2/revision2/proc/info"
+log_files_path="/home/rohit/Documents/task2/revision2/remoteServer"
+
+mkdir -p "$memory_status_path" 2>/dev/null
+
+touch "${processed_file_path}"
+
+analyze_logs() {
+    for file in "$log_files_path"/*; do
+        filename=$(basename "$file")
+        occurrence=$(grep -c $filename $processed_file_path)
+        if [[ $occurrence == 0 ]]; then
+            size1=$(wc -c "$file" )
+            sleep 0.1
+            size2=$(wc -c "$file" )
+            if [[ $size1 == $size2 ]]; then
+                status="PENDING"
+                Corrupt_message="NA"
+            else
+                status="INCOMING"
+                Corrupt_message="NA"
+            fi
+            echo "$status $Corrupt_message" > $memory_status_path/info_$filename
+        fi
+    done
+
+    for file in "$log_files_path"/*; do
+        filename=$(basename "$file")
+        occurrence=$(grep -c $filename $processed_file_path)
+        if [[ $occurrence == 0 ]]; then
+            isPending=$(grep "PENDING" $memory_status_path/info_$filename | wc -l)
+            if [[ $isPending == 1 ]]; then
+                status="Progressing"
+                Corrupt_message="NA"
+                totalCount=$(wc -l $file | cut -d " " -f 1)
+                count=0
+                while IFS= read -r line; do
+                    count=$(($count + 1))
+                    percentage=$(( $count * 100 /$totalCount ))
+                    echo "$status $percentage" > $memory_status_path/info_$filename
+                done < "$file"
+
+                expected_count=$(echo "$filename" | cut -d "_" -f 1)
+                if [[ $expected_count == $totalCount ]]; then
+                    pattern=$(echo "$filename" | cut -d "_" -f 2)
+                    pattern_count=$(echo "$filename" | cut -d "_" -f 3 )
+                    p2=$(echo "$pattern_count" | cut -d "." -f 1)
+                    actualPatternCount=$(grep -c "$pattern" "$file")
+                    if [[ $pattern_count == $actualPatternCount ]]; then
+                        status="PROCESSED"
+                        Corrupt_message="NO"
+                        echo "$status $Corrupt_message" > $memory_status_path/info_$filename
+                    else
+                        status="PROCESSED"
+                        Corrupt_message="Yes"
+                        echo "$status $Corrupt_message" > $memory_status_path/info_$filename
+                    fi
+                else
+                    status="PROCESSED"
+                    Corrupt_message="YES"
+                    echo "$status $Corrupt_message" > $memory_status_path/info_$filename
+                fi
+                echo "$filename" >> "$processed_file_path"
+            fi
+        fi
+    done
+}
+
+cowsay "Analyzing for corruption~~~~~~~~~~~~~"
+
+while true; do
+    analyze_logs
+done
